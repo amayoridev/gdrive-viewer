@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thư viện chọn ảnh</title>
+    <link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lightgallery.js@1.4.0/dist/css/lightgallery.min.css" />
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #0d8de5;
+        }
+        #info, #loading {
+            text-align: center; padding: 20px; background-color: #fff;
+            border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .gallery-item {
+            position: relative;
+            cursor: pointer;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+            display: block; /* Cần cho thẻ a */
+        }
+        .gallery-item:hover {
+            transform: scale(1.03);
+        }
+        .gallery-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .gallery-item .select-indicator {
+            content: '✔';
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 28px;
+            height: 28px;
+            background-color: #0d8de5;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            border: 2px solid white;
+            transition: opacity 0.2s, transform 0.2s;
+            opacity: 0; /* Ẩn mặc định */
+            transform: scale(0.5);
+        }
+        .gallery-item.selected .select-indicator {
+            opacity: 1; /* Hiện khi được chọn */
+            transform: scale(1);
+        }
+        /* Floating Controls */
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 20px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 50px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10000; /* Luôn nổi trên cùng */
+            display: none; /* Ẩn ban đầu */
+            align-items: center;
+            gap: 15px;
+        }
+        #controls button {
+            background-color: #0d8de5; color: white; border: none;
+            padding: 10px 20px; font-size: 14px; border-radius: 20px;
+            cursor: pointer; transition: background-color 0.2s;
+        }
+        #controls button:hover { background-color: #0b70b8; }
+        #controls button:disabled { background-color: #555; cursor: not-allowed; }
+        #result-container {
+            display: none; margin-top: 20px; padding: 20px;
+            background-color: #fff; border-radius: 8px;
+        }
+        #fileList {
+            background-color: #e9ebee; padding: 15px; border-radius: 5px;
+            white-space: pre-wrap; word-wrap: break-word; max-height: 300px;
+            overflow-y: auto; border: 1px solid #ddd;
+        }
+        /* Custom LightGallery select button */
+        #lg-select-btn {
+            font-size: 24px !important;
+        }
+        #lg-select-btn.selected {
+            color: #0d8de5 !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Thư viện chọn ảnh</h1>
+        <div id="loading">Đang tải dữ liệu từ Google Drive...</div>
+        <div id="info" style="display: none;"></div>
+        <div id="gallery"></div>
+    </div>
+
+    <div id="controls">
+        <p style="margin: 0;">Đã chọn: <b id="selectionCount">0</b> ảnh</p>
+        <button id="downloadTxtBtn" disabled>Tải file .txt</button>
+    </div>
+
+    <div class="container" id="result-container">
+        <h3>Danh sách tên file đã chọn:</h3>
+        <pre id="fileList"></pre>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/lightgallery.js@1.4.0/dist/js/lightgallery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lg-zoom.js@1.3.0/dist/lg-zoom.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lg-fullscreen.js@1.2.0/dist/lg-fullscreen.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lg-thumbnail.js@1.2.0/dist/lg-thumbnail.min.js"></script>
+
+    <script>
+        // BƯỚC 1: DÁN API KEY CỦA BẠN VÀO ĐÂY
+        const API_KEY = 'AIzaSyC9Pr27V18t9-8VPWR8fOiDaSR5D43FF9A';
+
+        const gallery = document.getElementById('gallery');
+        const loadingMessage = document.getElementById('loading');
+        const infoMessage = document.getElementById('info');
+        const controls = document.getElementById('controls');
+        const downloadTxtBtn = document.getElementById('downloadTxtBtn');
+        const selectionCount = document.getElementById('selectionCount');
+        
+        let selectedFiles = new Set();
+        let lightGalleryInstance = null;
+
+        function getFolderIdFromUrl(url) {
+            const regex = /\/folders\/([a-zA-Z0-9-_]+)/;
+            const match = url.match(regex);
+            return match ? match[1] : null;
+        }
+
+        async function fetchAndDisplayImages(folderId) {
+            loadingMessage.style.display = 'block';
+            const API_URL = `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and (mimeType='image/jpeg' or mimeType='image/png' or mimeType='image/gif') and trashed=false&key=${API_KEY}&fields=files(id,name,thumbnailLink,webContentLink)`;
+
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error(`Lỗi API: ${(await response.json()).error.message}`);
+                
+                const data = await response.json();
+                loadingMessage.style.display = 'none';
+
+                if (!data.files || data.files.length === 0) {
+                    infoMessage.textContent = 'Không tìm thấy ảnh nào trong thư mục.';
+                    infoMessage.style.display = 'block';
+                    return;
+                }
+                
+                controls.style.display = 'flex'; // Hiển thị floating menu
+                
+                data.files.forEach((file, index) => {
+                    const highResLink = `https://drive.google.com/uc?export=view&id=${file.id}`;
+                    
+                    const item = document.createElement('a');
+                    item.className = 'gallery-item';
+                    item.href = highResLink;
+                    item.dataset.fileName = file.name;
+                    item.dataset.fileId = file.id; // Lưu id để đồng bộ
+                    
+                    const img = document.createElement('img');
+                    img.src = file.thumbnailLink.replace(/=s\d+/, '=s320');
+                    img.alt = file.name;
+                    
+                    const indicator = document.createElement('div');
+                    indicator.className = 'select-indicator';
+                    
+                    item.appendChild(img);
+                    item.appendChild(indicator);
+                    gallery.appendChild(item);
+                });
+
+                initializeLightGallery();
+
+            } catch (error) {
+                loadingMessage.style.display = 'none';
+                infoMessage.textContent = `Đã xảy ra lỗi: ${error.message}.`;
+                infoMessage.style.display = 'block';
+            }
+        }
+
+        function initializeLightGallery() {
+            lightGalleryInstance = lightGallery(gallery, {
+                plugins: [lgZoom, lgFullscreen, lgThumbnail],
+                speed: 500,
+                download: false, // Tắt nút download mặc định
+                getCaptionFromTitleOrAlt: false,
+            });
+
+            // Thêm nút select tùy chỉnh vào LightGallery
+            gallery.addEventListener('onAfterOpen', (event) => {
+                const toolbar = document.querySelector('.lg-toolbar');
+                const selectBtn = document.createElement('button');
+                selectBtn.id = 'lg-select-btn';
+                selectBtn.className = 'lg-icon';
+                selectBtn.innerHTML = '✔';
+                toolbar.appendChild(selectBtn);
+
+                selectBtn.addEventListener('click', () => {
+                    const currentIndex = lightGalleryInstance.index;
+                    const galleryItem = gallery.children[currentIndex];
+                    toggleSelection(galleryItem);
+                });
+            });
+
+            // Cập nhật trạng thái nút select mỗi khi chuyển slide
+            gallery.addEventListener('onBeforeSlide', (event) => {
+                const { index } = event.detail;
+                const galleryItem = gallery.children[index];
+                const selectBtn = document.getElementById('lg-select-btn');
+                if (galleryItem.classList.contains('selected')) {
+                    selectBtn.classList.add('selected');
+                } else {
+                    selectBtn.classList.remove('selected');
+                }
+            });
+        }
+        
+        function toggleSelection(item) {
+            const fileName = item.dataset.fileName;
+            const selectBtn = document.getElementById('lg-select-btn');
+            
+            item.classList.toggle('selected');
+
+            if (item.classList.contains('selected')) {
+                selectedFiles.add(fileName);
+                if (selectBtn) selectBtn.classList.add('selected');
+            } else {
+                selectedFiles.delete(fileName);
+                if (selectBtn) selectBtn.classList.remove('selected');
+            }
+            
+            updateSelectionState();
+        }
+
+        function updateSelectionState() {
+            const count = selectedFiles.size;
+            selectionCount.textContent = count;
+            downloadTxtBtn.disabled = count === 0;
+        }
+        
+        function downloadTxtFile() {
+             if (selectedFiles.size === 0) return;
+            const fileText = Array.from(selectedFiles).sort().join('\n');
+            const blob = new Blob([fileText], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'danh-sach-anh-da-chon.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        window.onload = () => {
+            if (API_KEY === 'YOUR_API_KEY') {
+                infoMessage.textContent = 'LỖI CẤU HÌNH: Bạn chưa dán API Key vào file view.html.';
+                infoMessage.style.display = 'block';
+                loadingMessage.style.display = 'none';
+                return;
+            }
+
+            const params = new URLSearchParams(window.location.search);
+            const driveUrl = params.get('url');
+
+            if (!driveUrl) {
+                infoMessage.innerHTML = `Link không hợp lệ. Vui lòng quay lại trang chủ và tạo link mới.`;
+                infoMessage.style.display = 'block';
+                loadingMessage.style.display = 'none';
+                return;
+            }
+
+            const folderId = getFolderIdFromUrl(driveUrl);
+            if (folderId) {
+                fetchAndDisplayImages(folderId);
+            } else {
+                infoMessage.textContent = 'Không thể tìm thấy Folder ID từ URL được cung cấp.';
+                infoMessage.style.display = 'block';
+                loadingMessage.style.display = 'none';
+            }
+            
+            downloadTxtBtn.addEventListener('click', downloadTxtFile);
+        };
+    </script>
+</body>
+</html>
