@@ -41,6 +41,11 @@
             display: block;
             cursor: pointer;
             transition: transform 0.2s ease;
+            background-color: #e0e0e0; /* Thêm màu nền cho đẹp hơn khi ảnh tải */
+            
+            /* SỬA LỖI TẠI ĐÂY: Ép tất cả các ô có tỷ lệ vuông (1:1) */
+            aspect-ratio: 1 / 1; 
+            /* Bạn có thể đổi thành tỷ lệ khác như 4 / 5 (dọc) nếu muốn */
         }
         .gallery-item-content:hover {
              transform: scale(1.03);
@@ -48,7 +53,7 @@
         .gallery-item-content img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: cover; /* Giữ ảnh luôn vừa vặn và cắt phần thừa */
             display: block;
         }
         /* Nút chọn ở giao diện lưới */
@@ -137,8 +142,8 @@
         const downloadTxtBtn = document.getElementById('downloadTxtBtn');
         const selectionCount = document.getElementById('selectionCount');
         
+        let allFiles = []; 
         let selectedFiles = new Set();
-        let allFiles = []; // Mảng để lưu thông tin tất cả file
 
         function getFolderIdFromUrl(url) {
             const regex = /\/folders\/([a-zA-Z0-9-_]+)/;
@@ -166,10 +171,10 @@
                     return;
                 }
                 
-                allFiles = data.files; // Lưu danh sách file
+                allFiles = data.files;
                 controls.style.display = 'flex';
                 
-                gallery.innerHTML = ''; // Xóa gallery cũ
+                gallery.innerHTML = '';
                 allFiles.forEach((file, index) => {
                     const highResLink = file.thumbnailLink.replace(/=s\d+/, '=s1600');
                     const smallThumbLink = file.thumbnailLink.replace(/=s\d+/, '=s320');
@@ -178,7 +183,6 @@
                     itemWrapper.className = 'gallery-item';
                     itemWrapper.dataset.index = index;
 
-                    // Link để mở lightbox
                     const contentLink = document.createElement('a');
                     contentLink.className = 'gallery-item-content';
                     contentLink.href = highResLink;
@@ -189,12 +193,11 @@
                     img.alt = file.name;
                     contentLink.appendChild(img);
 
-                    // Nút chọn trên lưới
                     const selectBtn = document.createElement('div');
                     selectBtn.className = 'grid-select-btn';
                     selectBtn.innerHTML = '✔';
                     selectBtn.addEventListener('click', (e) => {
-                        e.stopPropagation(); // Ngăn mở lightbox khi bấm nút này
+                        e.stopPropagation();
                         toggleSelectionByIndex(index);
                     });
                     
@@ -213,7 +216,7 @@
         }
         
         function initializeLightGallery() {
-            const lg = lightGallery(gallery, {
+            lightGallery(gallery, {
                 selector: '.gallery-item-content',
                 thumbnail: true,
                 zoom: true,
@@ -225,6 +228,7 @@
             gallery.addEventListener('onAfterOpen', function() {
                 const instance = this.lgData.Lg;
                 const toolbar = document.querySelector('.lg-toolbar');
+                
                 if (document.getElementById('lg-select-btn')) return;
 
                 const selectBtn = document.createElement('button');
@@ -260,7 +264,12 @@
                 galleryItem.classList.add('selected');
             }
             
-            updateLightboxSelectButton(index);
+            // Cập nhật nút chọn trong lightbox nếu nó đang mở
+            const lg_instance = gallery.lgData && gallery.lgData.Lg;
+            if (lg_instance && lg_instance.lgOpened) {
+                 updateLightboxSelectButton(lg_instance.index);
+            }
+           
             updateGlobalSelectionState();
         }
 
@@ -269,7 +278,7 @@
             if (!selectBtn) return;
 
             const file = allFiles[index];
-            if (selectedFiles.has(file.name)) {
+            if (file && selectedFiles.has(file.name)) {
                 selectBtn.classList.add('selected');
             } else {
                 selectBtn.classList.remove('selected');
