@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thư viện chọn ảnh</title>
+    <title>GDrive Viewer</title>
     <link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lightgallery.js@1.4.0/dist/css/lightgallery.min.css" />
     <style>
         body {
@@ -32,30 +32,33 @@
         }
         .gallery-item {
             position: relative;
-            cursor: pointer;
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            transition: transform 0.2s ease;
             display: block;
         }
-        .gallery-item:hover {
-            transform: scale(1.03);
+        .gallery-item-content {
+            display: block;
+            cursor: pointer;
+            transition: transform 0.2s ease;
         }
-        .gallery-item img {
+        .gallery-item-content:hover {
+             transform: scale(1.03);
+        }
+        .gallery-item-content img {
             width: 100%;
             height: 100%;
             object-fit: cover;
             display: block;
         }
-        .gallery-item .select-indicator {
-            content: '✔';
+        /* Nút chọn ở giao diện lưới */
+        .grid-select-btn {
             position: absolute;
             top: 8px;
             right: 8px;
-            width: 28px;
-            height: 28px;
-            background-color: #0d8de5;
+            width: 30px;
+            height: 30px;
+            background-color: rgba(0, 0, 0, 0.4);
             color: white;
             border-radius: 50%;
             display: flex;
@@ -64,13 +67,16 @@
             font-size: 18px;
             font-weight: bold;
             border: 2px solid white;
-            transition: opacity 0.2s, transform 0.2s;
-            opacity: 0;
-            transform: scale(0.5);
+            cursor: pointer;
+            z-index: 10;
+            transition: background-color 0.2s, transform 0.2s;
         }
-        .gallery-item.selected .select-indicator {
-            opacity: 1;
-            transform: scale(1);
+        .grid-select-btn:hover {
+            background-color: rgba(0, 0, 0, 0.7);
+            transform: scale(1.1);
+        }
+        .gallery-item.selected .grid-select-btn {
+            background-color: #0d8de5;
         }
         #controls {
             position: fixed;
@@ -90,10 +96,11 @@
         #controls button {
             background-color: #0d8de5; color: white; border: none;
             padding: 10px 20px; font-size: 14px; border-radius: 20px;
-            cursor: pointer; transition: background-color 0.2s;
+            cursor: pointer;
         }
         #controls button:hover { background-color: #0b70b8; }
         #controls button:disabled { background-color: #555; cursor: not-allowed; }
+        /* Nút chọn ở giao diện mở rộng */
         #lg-select-btn {
             font-size: 24px !important;
         }
@@ -104,7 +111,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Thư viện chọn ảnh</h1>
+        <h1>GDrive Viewer</h1>
         <div id="loading">Đang tải dữ liệu từ Google Drive...</div>
         <div id="info" style="display: none;"></div>
         <div id="gallery"></div>
@@ -121,7 +128,6 @@
     <script src="https://cdn.jsdelivr.net/npm/lg-thumbnail.js@1.2.0/dist/lg-thumbnail.min.js"></script>
 
     <script>
-        // Đã thêm API Key của bạn vào đây
         const API_KEY = 'AIzaSyC9Pr27V18t9-8VPWR8fOiDaSR5D43FF9A';
 
         const gallery = document.getElementById('gallery');
@@ -132,6 +138,7 @@
         const selectionCount = document.getElementById('selectionCount');
         
         let selectedFiles = new Set();
+        let allFiles = []; // Mảng để lưu thông tin tất cả file
 
         function getFolderIdFromUrl(url) {
             const regex = /\/folders\/([a-zA-Z0-9-_]+)/;
@@ -147,9 +154,6 @@
                 const response = await fetch(API_URL);
                 if (!response.ok) {
                     const errorData = await response.json();
-                    if(errorData.error.message.includes("API key not valid")){
-                         throw new Error(`Lỗi API: API Key không hợp lệ hoặc đã bị giới hạn. Vui lòng kiểm tra lại.`);
-                    }
                     throw new Error(`Lỗi API: ${errorData.error.message}`);
                 }
                 
@@ -157,33 +161,46 @@
                 loadingMessage.style.display = 'none';
 
                 if (!data.files || data.files.length === 0) {
-                    infoMessage.textContent = 'Không tìm thấy ảnh nào trong thư mục. Vui lòng kiểm tra lại link hoặc đảm bảo thư mục được chia sẻ công khai.';
+                    infoMessage.textContent = 'Không tìm thấy ảnh nào trong thư mục.';
                     infoMessage.style.display = 'block';
                     return;
                 }
                 
+                allFiles = data.files; // Lưu danh sách file
                 controls.style.display = 'flex';
                 
-                data.files.forEach((file) => {
+                gallery.innerHTML = ''; // Xóa gallery cũ
+                allFiles.forEach((file, index) => {
                     const highResLink = file.thumbnailLink.replace(/=s\d+/, '=s1600');
                     const smallThumbLink = file.thumbnailLink.replace(/=s\d+/, '=s320');
 
-                    const item = document.createElement('a');
-                    item.className = 'gallery-item';
-                    item.dataset.src = highResLink; 
-                    item.href = highResLink;
-                    item.dataset.fileName = file.name;
-                    
+                    const itemWrapper = document.createElement('div');
+                    itemWrapper.className = 'gallery-item';
+                    itemWrapper.dataset.index = index;
+
+                    // Link để mở lightbox
+                    const contentLink = document.createElement('a');
+                    contentLink.className = 'gallery-item-content';
+                    contentLink.href = highResLink;
+                    contentLink.dataset.src = highResLink;
+
                     const img = document.createElement('img');
                     img.src = smallThumbLink;
                     img.alt = file.name;
+                    contentLink.appendChild(img);
+
+                    // Nút chọn trên lưới
+                    const selectBtn = document.createElement('div');
+                    selectBtn.className = 'grid-select-btn';
+                    selectBtn.innerHTML = '✔';
+                    selectBtn.addEventListener('click', (e) => {
+                        e.stopPropagation(); // Ngăn mở lightbox khi bấm nút này
+                        toggleSelectionByIndex(index);
+                    });
                     
-                    const indicator = document.createElement('div');
-                    indicator.className = 'select-indicator';
-                    
-                    item.appendChild(img);
-                    item.appendChild(indicator);
-                    gallery.appendChild(item);
+                    itemWrapper.appendChild(selectBtn);
+                    itemWrapper.appendChild(contentLink);
+                    gallery.appendChild(itemWrapper);
                 });
 
                 initializeLightGallery();
@@ -195,12 +212,9 @@
             }
         }
         
-        // =================================================================
-        // PHẦN LOGIC ĐÃ ĐƯỢC VIẾT LẠI HOÀN TOÀN ĐỂ SỬA LỖI
-        // =================================================================
         function initializeLightGallery() {
-            lightGallery(gallery, {
-                selector: '.gallery-item',
+            const lg = lightGallery(gallery, {
+                selector: '.gallery-item-content',
                 thumbnail: true,
                 zoom: true,
                 fullscreen: true,
@@ -209,10 +223,8 @@
             });
 
             gallery.addEventListener('onAfterOpen', function() {
-                // `this.lgData.Lg` là cách chính xác để lấy đối tượng lightgallery instance
                 const instance = this.lgData.Lg;
                 const toolbar = document.querySelector('.lg-toolbar');
-                
                 if (document.getElementById('lg-select-btn')) return;
 
                 const selectBtn = document.createElement('button');
@@ -221,51 +233,50 @@
                 selectBtn.innerHTML = '✔';
                 toolbar.appendChild(selectBtn);
 
-                selectBtn.addEventListener('click', function(e) {
+                selectBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const galleryItem = document.querySelectorAll('.gallery-item')[instance.index];
-                    toggleSelection(galleryItem, instance);
+                    toggleSelectionByIndex(instance.index);
                 });
                 
-                updateSelectButtonState(instance);
+                updateLightboxSelectButton(instance.index);
             });
 
             gallery.addEventListener('onAfterSlide', function() {
                 const instance = this.lgData.Lg;
-                updateSelectButtonState(instance);
+                updateLightboxSelectButton(instance.index);
             });
         }
         
-        function updateSelectButtonState(instance) {
-            if (!instance) return;
-            const galleryItem = document.querySelectorAll('.gallery-item')[instance.index];
-            const selectBtn = document.getElementById('lg-select-btn');
-            
-            if (!selectBtn || !galleryItem) return;
+        function toggleSelectionByIndex(index) {
+            const file = allFiles[index];
+            const galleryItem = document.querySelector(`.gallery-item[data-index='${index}']`);
+            if (!file || !galleryItem) return;
 
-            if (galleryItem.classList.contains('selected')) {
+            if (selectedFiles.has(file.name)) {
+                selectedFiles.delete(file.name);
+                galleryItem.classList.remove('selected');
+            } else {
+                selectedFiles.add(file.name);
+                galleryItem.classList.add('selected');
+            }
+            
+            updateLightboxSelectButton(index);
+            updateGlobalSelectionState();
+        }
+
+        function updateLightboxSelectButton(index) {
+            const selectBtn = document.getElementById('lg-select-btn');
+            if (!selectBtn) return;
+
+            const file = allFiles[index];
+            if (selectedFiles.has(file.name)) {
                 selectBtn.classList.add('selected');
             } else {
                 selectBtn.classList.remove('selected');
             }
         }
 
-        function toggleSelection(item, instance) {
-            if (!item) return;
-            const fileName = item.dataset.fileName;
-            item.classList.toggle('selected');
-
-            if (item.classList.contains('selected')) {
-                selectedFiles.add(fileName);
-            } else {
-                selectedFiles.delete(fileName);
-            }
-            
-            updateSelectButtonState(instance);
-            updateSelectionState();
-        }
-
-        function updateSelectionState() {
+        function updateGlobalSelectionState() {
             const count = selectedFiles.size;
             selectionCount.textContent = count;
             downloadTxtBtn.disabled = count === 0;
