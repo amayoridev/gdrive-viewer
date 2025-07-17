@@ -124,7 +124,7 @@
 
     <script>
         // BƯỚC 1: DÁN API KEY CỦA BẠN VÀO ĐÂY
-        const API_KEY = 'AIzaSyC9Pr27V18t9-8VPWR8fOiDaSR5D43FF9A'; // this api key is already restricted, so no worries
+        const API_KEY = 'AIzaSyC9Pr27V18t9-8VPWR8fOiDaSR5D43FF9A';
 
         const gallery = document.getElementById('gallery');
         const loadingMessage = document.getElementById('loading');
@@ -144,7 +144,8 @@
 
         async function fetchAndDisplayImages(folderId) {
             loadingMessage.style.display = 'block';
-            const API_URL = `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and (mimeType='image/jpeg' or mimeType='image/png' or mimeType='image/gif') and trashed=false&key=${API_KEY}&fields=files(id,name,thumbnailLink,webContentLink)`;
+            // Không cần webContentLink nữa
+            const API_URL = `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and (mimeType='image/jpeg' or mimeType='image/png' or mimeType='image/gif') and trashed=false&key=${API_KEY}&fields=files(id,name,thumbnailLink)`;
 
             try {
                 const response = await fetch(API_URL);
@@ -161,17 +162,20 @@
                 
                 controls.style.display = 'flex';
                 
-                data.files.forEach((file, index) => {
-                    const highResLink = `https://drive.google.com/uc?export=view&id=${file.id}`;
-                    
+                data.files.forEach((file) => {
+                    // SỬA LỖI Ở ĐÂY: Tạo link ảnh lớn từ link thumbnail
+                    const highResLink = file.thumbnailLink.replace(/=s\d+/, '=s1600');
+                    const smallThumbLink = file.thumbnailLink.replace(/=s\d+/, '=s320');
+
                     const item = document.createElement('a');
                     item.className = 'gallery-item';
-                    item.href = highResLink;
+                    // Thuộc tính data-src sẽ được lightGallery sử dụng cho ảnh lớn
+                    item.dataset.src = highResLink; 
+                    item.href = highResLink; // href vẫn cần cho fallback
                     item.dataset.fileName = file.name;
-                    item.dataset.fileId = file.id;
                     
                     const img = document.createElement('img');
-                    img.src = file.thumbnailLink.replace(/=s\d+/, '=s320');
+                    img.src = smallThumbLink;
                     img.alt = file.name;
                     
                     const indicator = document.createElement('div');
@@ -193,20 +197,16 @@
 
         function initializeLightGallery() {
             lightGalleryInstance = lightGallery(gallery, {
-                // SỬA LỖI Ở ĐÂY: Thay vì dùng mảng "plugins", chúng ta bật các tùy chọn này theo cú pháp của v1.x
                 selector: '.gallery-item',
                 thumbnail: true,
                 zoom: true,
                 fullscreen: true,
-                // ---
                 speed: 500,
                 download: false,
-                getCaptionFromTitleOrAlt: false,
             });
 
             gallery.addEventListener('onAfterOpen', () => {
                 const toolbar = document.querySelector('.lg-toolbar');
-                // Tránh thêm nút nhiều lần nếu đã có
                 if (document.getElementById('lg-select-btn')) return;
 
                 const selectBtn = document.createElement('button');
@@ -221,7 +221,6 @@
                     toggleSelection(galleryItem);
                 });
 
-                // Cập nhật trạng thái ngay khi mở
                 updateSelectButtonState(lightGalleryInstance.index);
             });
 
@@ -234,7 +233,7 @@
         function updateSelectButtonState(index) {
             const galleryItem = document.querySelectorAll('.gallery-item')[index];
             const selectBtn = document.getElementById('lg-select-btn');
-            if (!selectBtn) return;
+            if (!selectBtn || !galleryItem) return;
 
             if (galleryItem.classList.contains('selected')) {
                 selectBtn.classList.add('selected');
