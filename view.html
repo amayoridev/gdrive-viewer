@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Viewing GDrive Photos</title>
+    <title>Thư viện chọn ảnh</title>
     <link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lightgallery.js@1.4.0/dist/css/lightgallery.min.css" />
     <style>
         body {
@@ -121,6 +121,7 @@
     <script src="https://cdn.jsdelivr.net/npm/lg-thumbnail.js@1.2.0/dist/lg-thumbnail.min.js"></script>
 
     <script>
+        // Đã thêm API Key của bạn vào đây
         const API_KEY = 'AIzaSyC9Pr27V18t9-8VPWR8fOiDaSR5D43FF9A';
 
         const gallery = document.getElementById('gallery');
@@ -131,7 +132,6 @@
         const selectionCount = document.getElementById('selectionCount');
         
         let selectedFiles = new Set();
-        let lightGalleryInstance = null;
 
         function getFolderIdFromUrl(url) {
             const regex = /\/folders\/([a-zA-Z0-9-_]+)/;
@@ -145,13 +145,19 @@
 
             try {
                 const response = await fetch(API_URL);
-                if (!response.ok) throw new Error(`Lỗi API: ${(await response.json()).error.message}`);
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    if(errorData.error.message.includes("API key not valid")){
+                         throw new Error(`Lỗi API: API Key không hợp lệ hoặc đã bị giới hạn. Vui lòng kiểm tra lại.`);
+                    }
+                    throw new Error(`Lỗi API: ${errorData.error.message}`);
+                }
                 
                 const data = await response.json();
                 loadingMessage.style.display = 'none';
 
                 if (!data.files || data.files.length === 0) {
-                    infoMessage.textContent = 'Không tìm thấy ảnh nào trong thư mục.';
+                    infoMessage.textContent = 'Không tìm thấy ảnh nào trong thư mục. Vui lòng kiểm tra lại link hoặc đảm bảo thư mục được chia sẻ công khai.';
                     infoMessage.style.display = 'block';
                     return;
                 }
@@ -184,13 +190,16 @@
 
             } catch (error) {
                 loadingMessage.style.display = 'none';
-                infoMessage.textContent = `Đã xảy ra lỗi: ${error.message}.`;
+                infoMessage.textContent = `${error.message}`;
                 infoMessage.style.display = 'block';
             }
         }
-
+        
+        // =================================================================
+        // PHẦN LOGIC ĐÃ ĐƯỢC VIẾT LẠI HOÀN TOÀN ĐỂ SỬA LỖI
+        // =================================================================
         function initializeLightGallery() {
-            lightGalleryInstance = lightGallery(gallery, {
+            lightGallery(gallery, {
                 selector: '.gallery-item',
                 thumbnail: true,
                 zoom: true,
@@ -199,9 +208,11 @@
                 download: false,
             });
 
-            // SỬA LỖI #1: Lắng nghe sự kiện onAfterOpen
-            gallery.addEventListener('onAfterOpen', () => {
+            gallery.addEventListener('onAfterOpen', function() {
+                // `this.lgData.Lg` là cách chính xác để lấy đối tượng lightgallery instance
+                const instance = this.lgData.Lg;
                 const toolbar = document.querySelector('.lg-toolbar');
+                
                 if (document.getElementById('lg-select-btn')) return;
 
                 const selectBtn = document.createElement('button');
@@ -210,28 +221,24 @@
                 selectBtn.innerHTML = '✔';
                 toolbar.appendChild(selectBtn);
 
-                selectBtn.addEventListener('click', (e) => {
-                    e.stopPropagation(); // Ngăn sự kiện click khác
-                    const currentIndex = lightGalleryInstance.index;
-                    const galleryItem = document.querySelectorAll('.gallery-item')[currentIndex];
-                    toggleSelection(galleryItem);
+                selectBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const galleryItem = document.querySelectorAll('.gallery-item')[instance.index];
+                    toggleSelection(galleryItem, instance);
                 });
-
-                // Cập nhật trạng thái nút chọn ngay khi mở ảnh
-                updateSelectButtonState();
+                
+                updateSelectButtonState(instance);
             });
 
-            // SỬA LỖI #2: Sử dụng sự kiện onAfterSlide để cập nhật sau khi chuyển ảnh
-            gallery.addEventListener('onAfterSlide', () => {
-                updateSelectButtonState();
+            gallery.addEventListener('onAfterSlide', function() {
+                const instance = this.lgData.Lg;
+                updateSelectButtonState(instance);
             });
         }
         
-        // SỬA LỖI #3: Hàm cập nhật nút chọn giờ sẽ lấy index trực tiếp từ lightGalleryInstance
-        function updateSelectButtonState() {
-            if (!lightGalleryInstance) return;
-            const currentIndex = lightGalleryInstance.index;
-            const galleryItem = document.querySelectorAll('.gallery-item')[currentIndex];
+        function updateSelectButtonState(instance) {
+            if (!instance) return;
+            const galleryItem = document.querySelectorAll('.gallery-item')[instance.index];
             const selectBtn = document.getElementById('lg-select-btn');
             
             if (!selectBtn || !galleryItem) return;
@@ -243,7 +250,7 @@
             }
         }
 
-        function toggleSelection(item) {
+        function toggleSelection(item, instance) {
             if (!item) return;
             const fileName = item.dataset.fileName;
             item.classList.toggle('selected');
@@ -254,7 +261,7 @@
                 selectedFiles.delete(fileName);
             }
             
-            updateSelectButtonState();
+            updateSelectButtonState(instance);
             updateSelectionState();
         }
 
@@ -279,14 +286,6 @@
         }
 
         window.onload = () => {
-            // Thay YOUR_API_KEY bằng API Key của bạn
-            if (!API_KEY || API_KEY === 'YOUR_API_KEY') {
-                infoMessage.textContent = 'LỖI CẤU HÌNH: Bạn chưa dán API Key vào file view.html.';
-                infoMessage.style.display = 'block';
-                loadingMessage.style.display = 'none';
-                return;
-            }
-
             const params = new URLSearchParams(window.location.search);
             const driveUrl = params.get('url');
 
