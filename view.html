@@ -37,7 +37,7 @@
             overflow: hidden;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             transition: transform 0.2s ease;
-            display: block; /* Cần cho thẻ a */
+            display: block;
         }
         .gallery-item:hover {
             transform: scale(1.03);
@@ -65,14 +65,13 @@
             font-weight: bold;
             border: 2px solid white;
             transition: opacity 0.2s, transform 0.2s;
-            opacity: 0; /* Ẩn mặc định */
+            opacity: 0;
             transform: scale(0.5);
         }
         .gallery-item.selected .select-indicator {
-            opacity: 1; /* Hiện khi được chọn */
+            opacity: 1;
             transform: scale(1);
         }
-        /* Floating Controls */
         #controls {
             position: fixed;
             bottom: 20px;
@@ -83,8 +82,8 @@
             color: white;
             border-radius: 50px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            z-index: 10000; /* Luôn nổi trên cùng */
-            display: none; /* Ẩn ban đầu */
+            z-index: 10000;
+            display: none;
             align-items: center;
             gap: 15px;
         }
@@ -95,7 +94,6 @@
         }
         #controls button:hover { background-color: #0b70b8; }
         #controls button:disabled { background-color: #555; cursor: not-allowed; }
-        /* Custom LightGallery select button */
         #lg-select-btn {
             font-size: 24px !important;
         }
@@ -123,8 +121,7 @@
     <script src="https://cdn.jsdelivr.net/npm/lg-thumbnail.js@1.2.0/dist/lg-thumbnail.min.js"></script>
 
     <script>
-        // BƯỚC 1: DÁN API KEY CỦA BẠN VÀO ĐÂY
-        const API_KEY = 'AIzaSyC9Pr27V18t9-8VPWR8fOiDaSR5D43FF9A';
+        const API_KEY = 'YOUR_API_KEY';
 
         const gallery = document.getElementById('gallery');
         const loadingMessage = document.getElementById('loading');
@@ -144,7 +141,6 @@
 
         async function fetchAndDisplayImages(folderId) {
             loadingMessage.style.display = 'block';
-            // Không cần webContentLink nữa
             const API_URL = `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and (mimeType='image/jpeg' or mimeType='image/png' or mimeType='image/gif') and trashed=false&key=${API_KEY}&fields=files(id,name,thumbnailLink)`;
 
             try {
@@ -163,15 +159,13 @@
                 controls.style.display = 'flex';
                 
                 data.files.forEach((file) => {
-                    // SỬA LỖI Ở ĐÂY: Tạo link ảnh lớn từ link thumbnail
                     const highResLink = file.thumbnailLink.replace(/=s\d+/, '=s1600');
                     const smallThumbLink = file.thumbnailLink.replace(/=s\d+/, '=s320');
 
                     const item = document.createElement('a');
                     item.className = 'gallery-item';
-                    // Thuộc tính data-src sẽ được lightGallery sử dụng cho ảnh lớn
                     item.dataset.src = highResLink; 
-                    item.href = highResLink; // href vẫn cần cho fallback
+                    item.href = highResLink;
                     item.dataset.fileName = file.name;
                     
                     const img = document.createElement('img');
@@ -205,6 +199,7 @@
                 download: false,
             });
 
+            // SỬA LỖI #1: Lắng nghe sự kiện onAfterOpen
             gallery.addEventListener('onAfterOpen', () => {
                 const toolbar = document.querySelector('.lg-toolbar');
                 if (document.getElementById('lg-select-btn')) return;
@@ -215,24 +210,30 @@
                 selectBtn.innerHTML = '✔';
                 toolbar.appendChild(selectBtn);
 
-                selectBtn.addEventListener('click', () => {
+                selectBtn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Ngăn sự kiện click khác
                     const currentIndex = lightGalleryInstance.index;
                     const galleryItem = document.querySelectorAll('.gallery-item')[currentIndex];
                     toggleSelection(galleryItem);
                 });
 
-                updateSelectButtonState(lightGalleryInstance.index);
+                // Cập nhật trạng thái nút chọn ngay khi mở ảnh
+                updateSelectButtonState();
             });
 
-            gallery.addEventListener('onBeforeSlide', (event) => {
-                const { index } = event.detail;
-                updateSelectButtonState(index);
+            // SỬA LỖI #2: Sử dụng sự kiện onAfterSlide để cập nhật sau khi chuyển ảnh
+            gallery.addEventListener('onAfterSlide', () => {
+                updateSelectButtonState();
             });
         }
         
-        function updateSelectButtonState(index) {
-            const galleryItem = document.querySelectorAll('.gallery-item')[index];
+        // SỬA LỖI #3: Hàm cập nhật nút chọn giờ sẽ lấy index trực tiếp từ lightGalleryInstance
+        function updateSelectButtonState() {
+            if (!lightGalleryInstance) return;
+            const currentIndex = lightGalleryInstance.index;
+            const galleryItem = document.querySelectorAll('.gallery-item')[currentIndex];
             const selectBtn = document.getElementById('lg-select-btn');
+            
             if (!selectBtn || !galleryItem) return;
 
             if (galleryItem.classList.contains('selected')) {
@@ -243,6 +244,7 @@
         }
 
         function toggleSelection(item) {
+            if (!item) return;
             const fileName = item.dataset.fileName;
             item.classList.toggle('selected');
 
@@ -252,7 +254,7 @@
                 selectedFiles.delete(fileName);
             }
             
-            updateSelectButtonState(lightGalleryInstance.index);
+            updateSelectButtonState();
             updateSelectionState();
         }
 
@@ -277,7 +279,8 @@
         }
 
         window.onload = () => {
-            if (API_KEY === 'YOUR_API_KEY') {
+            // Thay YOUR_API_KEY bằng API Key của bạn
+            if (!API_KEY || API_KEY === 'YOUR_API_KEY') {
                 infoMessage.textContent = 'LỖI CẤU HÌNH: Bạn chưa dán API Key vào file view.html.';
                 infoMessage.style.display = 'block';
                 loadingMessage.style.display = 'none';
